@@ -1,2 +1,0 @@
-# pintOS
-OS design project
