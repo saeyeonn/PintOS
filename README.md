@@ -10,7 +10,7 @@ We will run Pintos projects in a system simulator, that is, a program that simul
 
 <br>
 
-Pass Test : 27/27
+✅ Pass Test : 27/27
 
 <br>
 
@@ -19,7 +19,7 @@ Pass Test : 27/27
 
 ### 1. Alarm Clock
 
-#### Main Goal
+#### 📍 Main Goal
 
 Current Pintos uses busy-waiting for alarm clock, so we try to modify PintOS to use sleep/wakeup instead of busy-waiting.
 
@@ -27,7 +27,7 @@ Current Pintos uses busy-waiting for alarm clock, so we try to modify PintOS to 
 
 ### 2. Priority Scheduling
 
-#### Main goal
+#### 📍 Main goal
 
 The current scheduler in Pintos is implemented as FIFO (First-In-First-Out), so we try to modify PintOS to priority scheduling.
 
@@ -45,7 +45,7 @@ We will consider
 
 ### 3. Advanced Scheduler
 
-#### Main goal
+#### 📍 Main goal
 
 - Implement 4.4 BSD scheduler MLFQ like scheduler
 - Give priority to the processes with interactive nature.
@@ -64,18 +64,20 @@ We will consider
 
 ### [ Requirements ]
 
-#### 1. Argument Passing
+### 1. Argument Passing
 
-Main goal
+#### 📍 Main goal
+
 - You need to develop a feature to parse the command line string, store it on the stack, and pass arguments to the program.
 - Instead of simply passing the program file name as an argument in process_execute(), you should modify it to parse words each time a space is encountered.
 - In this case, the first word is the program name, and the second and third words are the first and second arguments, respectively.
 
 <br>
 
-#### 2. System Calls
+### 2. System Calls
 
-#### Main goal
+#### 📍 Main goal
+
 - Current Pintos doesn’t have implemented system call handlers, so system calls are not processed.
 - Implement system call handler and system calls
 - Add system calls to provide services to users in system call handler
@@ -83,9 +85,10 @@ Main goal
 
 <br>
 
-#### 3. File manipulation
+### 3. File manipulation
 
-#### Main goal
+#### 📍 Main goal
+
 - Add system calls to provide services to users in system call handler
 - File related system call: create, remove, open, filesize, read, write, seek, tell, close
 
