@@ -6,8 +6,8 @@ We will run Pintos projects in a system simulator, that is, a program that simul
 
 <br>
 
-✅ Test Result ✅ 
-Project 1 : 27 / 27
+✅ Test Result ✅ <br>
+Project 1 : 27 / 27 <br>
 Project 2 : 62 / 76
 
 <br>
