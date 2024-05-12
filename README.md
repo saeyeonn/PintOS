@@ -6,11 +6,13 @@ We will run Pintos projects in a system simulator, that is, a program that simul
 
 <br>
 
-## Project 1: Threads
+✅ Test Result ✅ 
+- Project 1 : 27/27
+- Project 2 : 62/76
 
 <br>
 
-✅ Pass Test : 27/27
+## Project 1: Threads
 
 <br>
 
