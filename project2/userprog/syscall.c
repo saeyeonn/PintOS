@@ -3,386 +3,456 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-#include "process.h"
-//추가
-#include "devices/shutdown.h"
-// #include "devices/input.h"
 #include "threads/vaddr.h"
-// #include "userprog/pagedir.h"
-#include <list.h>
-// #include "threads/malloc.h"
-#include "filesys/filesys.h"
+#include "userprog/pagedir.h"
+#include "threads/init.h"
+#include "devices/shutdown.h" 
 #include "filesys/file.h"
-
+#include "filesys/filesys.h"
+#include "userprog/process.h"
+#include "devices/input.h"
+#include "threads/malloc.h"
 
 static void syscall_handler (struct intr_frame *);
-bool is_valid_ptr(const void *usr_ptr);
+void get_args (struct intr_frame *f, int * args, int num_of_args);
+
+
+struct thread_file
+{
+    struct list_elem file_elem;
+    struct file *file_addr;
+    int fd;
+};
+
+struct lock fs_lock;
 
 void
-syscall_init (void) 
+syscall_init (void)
 {
-  // lock_init(&filesys_lock);
+  lock_init(&fs_lock);
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
-static void syscall_handler (struct intr_frame *f UNUSED) 
+static void
+syscall_handler (struct intr_frame *f UNUSED)
 {
-  switch(*(int32_t*) (f->esp)){
-    case SYS_HALT:
-      halt(); 
-      break;
+    if (!is_valid_ptr((const void *) f->esp)) {
+        exit(-1);
+    }
 
-    case SYS_EXIT:
-      if (!is_valid_ptr(f->esp+4)) exit(-1);
-      exit(*(int*) (f->esp+4));
-      break;
+    int args[3];
+    void *page_ptr;
+    uint32_t *pd = thread_current() -> pagedir;
 
-    case SYS_EXEC:
-      if (!is_valid_ptr(f->esp+4)) exit(-1);
-      f->eax=exec((char*)*(uint32_t*) (f->esp+4));
-      break;
+		switch(*(int *) f->esp)
+		{
+			case SYS_HALT:
+				halt();
+				break;
 
-    case SYS_WAIT:
-      if (!is_valid_ptr(f->esp+4)) exit(-1);
-      f->eax = wait(*(uint32_t*) (f->esp+4));
-      break;
-    
-    case SYS_CREATE:
-      if (!is_valid_ptr(f->esp+4) || !is_valid_ptr(f->esp+8)) exit(-1);
-      f->eax = create((char*)*(uint32_t*)(f->esp+4), *(uint32_t*) (f->esp+8));
-      break;
+			case SYS_EXIT:
+        get_args(f, &args[0], 1);
+				exit(args[0]);
+				break;
 
-    case SYS_REMOVE:
-      if (!is_valid_ptr(f->esp+4)) exit(-1);
-      f->eax = file_remove((char*)*(uint32_t*) (f->esp+4));
-      break;
-    
-    case SYS_OPEN:
-      if (!is_valid_ptr(f->esp+4)) exit(-1);
-      f->eax = open((char*)*(uint32_t*) (f->esp+4));
-      break;
+			case SYS_EXEC:
+				get_args(f, &args[0], 1);
+        page_ptr = (void *) pagedir_get_page(pd, (const void *) args[0]);
+        if (page_ptr == NULL) exit(-1);
+      
+        args[0] = (int) page_ptr;
+				f -> eax = exec((const char *) args[0]);
+				break;
 
-    case SYS_FILESIZE:
-      if (!is_valid_ptr(f->esp + 4)) exit(-1);
-      f->eax = filesize(*(uint32_t *)(f->esp + 4));
-      break;
+			case SYS_WAIT:
+				get_args(f, &args[0], 1);
+				f->eax = wait((pid_t) args[0]);
+				break;
+
+			case SYS_CREATE:
+				get_args(f, &args[0], 2);
+        validate_buffer((void *)args[0], args[1]);
+        page_ptr = pagedir_get_page(pd, (const void *) args[0]);
+        if (page_ptr == NULL) exit(-1);
+        args[0] = (int) page_ptr;
+        f -> eax = create((const char *) args[0], (unsigned) args[1]);
+				break;
+
+			case SYS_REMOVE:
+        get_args(f, &args[0], 1);
+        page_ptr = pagedir_get_page(pd, (const void *) args[0]);
+        if (page_ptr == NULL) exit(-1);
+        
+        args[0] = (int)page_ptr;
+        f->eax = remove((const char *) args[0]);
+				break;
+
+			case SYS_OPEN:
+        get_args(f, &args[0], 1);
+        page_ptr = pagedir_get_page(pd, (const void *) args[0]);
+        if (page_ptr == NULL) exit(-1);
+        args[0] = (int)page_ptr;
+        f -> eax = open((const char *) args[0]);
+				break;
+
+			case SYS_FILESIZE:
+        get_args(f, &args[0], 1);
+        f->eax = filesize(args[0]);
+				break;
+
+			case SYS_READ:
+        get_args(f, &args[0], 3);
+        validate_buffer((void *)args[1], args[2]);
+        page_ptr = pagedir_get_page(pd, (const void *) args[1]);
+        if (page_ptr == NULL) exit(-1);
+        
+        args[1] = (int)page_ptr;
+        f->eax = read(args[0], (void *) args[1], (unsigned) args[2]);
+				break;
+
+			case SYS_WRITE:
+        get_args(f, &args[0], 3);
+        validate_buffer((void *)args[1], args[2]);
+        page_ptr = pagedir_get_page(pd, (const void *) args[1]);
+        if (page_ptr == NULL) exit(-1);
+        args[1] = (int) page_ptr;
+        f->eax = write(args[0], (const void *) args[1], (unsigned) args[2]);
+        break;
+
+			case SYS_SEEK:
+        get_args(f, &args[0], 2);
+        seek(args[0], (unsigned) args[1]);
+        break;
+
+			case SYS_TELL:
+        get_args(f, &args[0], 1);
+        f->eax = tell(args[0]);
+        break;
+
+			case SYS_CLOSE:
+        get_args(f, &args[0], 1);
+        close(args[0]);
+				break;
+
+			default:
+				exit(-1);
+				break;
+		}
+}
+
+
+void halt (void)
+{
+	shutdown_power_off();
+}
+
+
+void exit (int status)
+{
+	thread_current() -> exit_status = status;
+	printf("%s: exit(%d)\n", thread_current() -> name, status);
+  thread_exit ();
+}
+
+int write(int fd, const void *buffer, unsigned len)
+{
+  struct list_elem *e;
+  struct list *fd_list = &thread_current() -> fd_list;
+  int w;
   
-    case SYS_READ:
-      if (!is_valid_ptr(f->esp + 4) || !is_valid_ptr(f->esp + 8) || !is_valid_ptr(f->esp + 12)) exit(-1);
-      f->eax = read((int)*(uint32_t *)(f->esp + 4), (const void *)*(uint32_t *)(f->esp + 8), (unsigned)*(uint32_t *)(f->esp + 12));
-      break;
+  lock_acquire(&fs_lock);
+
+  if (fd == 1)
+  {
+    putbuf(buffer, len);
+    lock_release(&fs_lock);
     
-    case SYS_WRITE:
-      if (!is_valid_ptr(f->esp + 4) || !is_valid_ptr(f->esp + 8) || !is_valid_ptr(f->esp + 12)) exit(-1);
-      f->eax = write((int)*(uint32_t *)(f->esp + 4), (const void *)*(uint32_t *)(f->esp + 8), (unsigned)*(uint32_t *)(f->esp + 12));
-      break;
-
-    case SYS_SEEK:
-      if (!is_valid_ptr(f->esp + 4) || !is_valid_ptr(f->esp + 8)) exit(-1);
-      seek((int)*(uint32_t *)(f->esp + 4), (unsigned)*(uint32_t *)(f->esp + 8));
-      break;
-
-    case SYS_TELL:
-      if (!is_valid_ptr(f->esp + 4)) exit(-1);
-      f->eax = tell((int)*(uint32_t *)(f->esp + 4));
-      break;
-
-    case SYS_CLOSE:
-      if (!is_valid_ptr(f->esp + 4)) exit(-1);
-      close(*(uint32_t *)(f->esp + 4));
-      break;
-
-    default:
-      exit(-1);
-      break;
+    return len;
   }
+
+  if (fd == 0 || fd == 1 || list_empty(fd_list))
+  {
+    lock_release(&fs_lock);
+    
+    return 0;
+  }
+
+  e = list_front(fd_list);
+  while (e != NULL)
+  {
+    struct thread_file *t = list_entry(e, struct thread_file, file_elem);
+    if (t -> fd == fd)
+    {
+      w = (int) file_write(t -> file_addr, buffer, len);
+      lock_release(&fs_lock);
+      return w;
+    }
+    e = e -> next;
+  }
+
+  lock_release(&fs_lock);
+  return 0;
 }
 
-// system call 3
-bool is_valid_ptr(const void *usr_ptr) {
-  struct thread *cur = thread_current();
 
-  // 1. NULL 포인터 검사
-  if (usr_ptr == NULL) {
-    return false;
-  }
+pid_t exec (const char *cmd_line)
+{
+	if (!cmd_line) return -1;
 
-  // 2. 사용자 가상 주소 공간 내에 있는지 검사
-  if (!is_user_vaddr(usr_ptr)) {
-    return false;
-  }
+  lock_acquire(&fs_lock);
+	
+  pid_t child_tid = process_execute(cmd_line);
+  
+  lock_release(&fs_lock);
 
-  // 3. 페이지 디렉토리에서 주소 검사
-  if (pagedir_get_page(cur->pagedir, usr_ptr) == NULL) {
-    return false;
-  }
-
-  // 모든 검사를 통과하면, 주어진 포인터는 유효함
-  return true;
+	return child_tid;
 }
 
-//system call 4
-int wait(pid_t pid)
+int wait (pid_t pid)
 {
   return process_wait(pid);
 }
 
-//system call 5
-pid_t exec (const char *cmd_line) {
-  pid_t tid;
-  struct thread *cur = thread_current();
-
-  // 사용자 포인터 검증
-  if (!is_user_vaddr(cmd_line)) {
-    exit(-1); // cmd_line 포인터가 유효하지 않으면 현재 스레드 종료
-  }
-
-  // 현재 스레드의 child_load_status 초기화
-  cur->child_load_status = 0;
-
-  // 새로운 프로세스 실행
-  tid = process_execute(cmd_line);
-
-  // 동기화를 위한 잠금 획득
-  lock_acquire(&cur->lock_child);
-
-  // 자식 프로세스의 로딩 완료 대기
-  while (cur->child_load_status == 0) {
-    cond_wait(&cur->cond_child, &cur->lock_child);
-  }
-
-  // 자식 프로세스 로딩 실패 시
-  if (cur->child_load_status == -1) {
-    tid = -1; // exec 호출 실패를 나타내는 -1로 설정
-  }
-
-  // 잠금 해제
-  lock_release(&cur->lock_child);
-
-  // 새로운 프로세스의 tid 반환, 실패 시 -1 반환
-  return tid;
-}
-
-//system call 7
-void exit(int status) {
-    struct thread *cur = thread_current();
-    struct list_elem *e;
-    // struct child_process *child = 
-    // child_process->exit_status = status; // 현재 스레드의 exit_status를 업데이트
-
-    // 부모 스레드의 children 리스트에서 현재 스레드를 찾아서 상태 정보를 업데이트
-    if (cur->parent_id != TID_ERROR) {
-        struct thread *parent = thread_get_by_id(cur->parent_id);
-        if (parent != NULL) {
-            lock_acquire(&parent->lock_child); // 부모 스레드의 children 리스트에 대한 동기화를 위해 잠금
-            for (e = list_begin(&parent->children); e != list_end(&parent->children); e = list_next(e)) {
-                struct child_process *child = list_entry(e, struct child_process, elem);
-                if (child->tid == cur->tid) {
-                    child->exit_status = status; // 자식 프로세스의 exit_status를 업데이트
-                    break;
-                }
-            }
-            lock_release(&parent->lock_child); // 잠금 해제
-        }
-    }
-
-    // 현재 스레드(자식 프로세스) 종료
-    thread_exit();
-}
-
-//system call 8
-void halt(){
-  shutdown_power_off();
-}
-
-
-
-// // //file m 2
-bool creat(const char *file, unsigned initial_size){
-  return filesys_create(file, initial_size);
-}
-
-// system call - 8
-int process_add_file(struct file *f)
+bool create (const char *file_name, unsigned size)
 {
-  struct thread *cur = thread_current();
-  int i;
+  lock_acquire(&fs_lock);
 
-  for(i = 3; i < 128; i++)
+  bool status = filesys_create(file_name, size);
+  
+  lock_release(&fs_lock);
+  
+  return status;
+}
+
+bool remove (const char *file)
+{
+  lock_acquire(&fs_lock);
+  bool was_removed = filesys_remove(file);
+  lock_release(&fs_lock);
+  return was_removed;
+}
+
+int open (const char *file_name)
+{
+  lock_acquire(&fs_lock);
+
+  struct file* f = filesys_open(file_name);
+
+  if(f == NULL)
   {
-    if (cur-> fd_table[i] == NULL)
-    {
-      cur-> fd_table[i] = f;
-      cur -> fd_index = i;
-      return cur -> fd_index;
-    }
+    lock_release(&fs_lock);
+    return -1;
   }
 
-  cur -> fd_index = 128;
-  return -1;
-}
-
-// system call - 9
-int open(const char *file)
-{
-  if (file == NULL) return -1;
-
-  lock_acquire(&filesys_lock);
-  struct file *open_file = filesys_open(file);
-
-  if(open_file == NULL) return -1;
-
-  int fd =process_add_file(open_file);
-
-  if (fd == -1) file_close(open_file);
-
-  lock_release(&filesys_lock);
+  struct thread_file *new_file = malloc(sizeof(struct thread_file));
+  new_file->file_addr = f;
+  int fd = thread_current () -> cur_fd;
+  thread_current () -> cur_fd++;
+  new_file -> fd = fd;
+  list_push_front(&thread_current () -> fd_list, &new_file -> file_elem);
+  lock_release(&fs_lock);
   return fd;
 }
 
+int filesize(int fd)
+{
+  struct list_elem *e;
 
+  lock_acquire(&fs_lock);
 
-
-//system call -13
-int read (int fd, void *buffer, unsigned length){
-    unsigned char *buf = buffer;
-    int read_length;
-    if (fd <= 0 || fd >= 128) {
-        return -1;
-    }
-
-    // is_valid_ptr 함수로 변경하여 버퍼 주소 유효성 검사
-    if (!is_valid_ptr(buffer)) {
-        // 유효하지 않은 포인터일 경우, 에러 반환
-        return -1;
-    }
-
-    lock_acquire(&filesys_lock);
-
-    if (fd == 0) {
-        for (read_length = 0; read_length < length; read_length++) {
-            char c = input_getc();
-            if (!c) {
-                break;
-            }
-            // 버퍼에 입력값 복사
-            buf[read_length] = c;
-        }
-        lock_release(&filesys_lock);
-        // 실제 읽은 길이 반환
-        return read_length;
-    } else {
-        struct file *f = process_get_file(fd);
-        if (f == NULL) {
-            lock_release(&filesys_lock);
-            return -1;
-        }
-
-        read_length = file_read(f, buffer, length);
-        lock_release(&filesys_lock);
-        return read_length;
-    }
-}
-
-
-//system call -14
-struct file *process_get_file(int fd_index){
-  if (fd_index < 3 || fd_index >= 128){
-    return NULL;
-  }
-  return thread_current() -> fd_table[fd_index];;
-}
-
-//system call -15
-int filesize (int fd){
-  struct file *f = process_get_file(fd);
-  if (f == NULL){
+  if (list_empty(&thread_current() -> fd_list))
+  {
+    lock_release(&fs_lock);
     return -1;
   }
-  return file_length(f);
+
+  e = list_front(&thread_current() -> fd_list);
+
+  while (e != NULL)
+  {
+    struct thread_file *t = list_entry(e, struct thread_file, file_elem);
+    if (t -> fd == fd)
+    {
+      lock_release(&fs_lock);
+      return (int) file_length(t -> file_addr);
+    }
+    e = e->next;
+  }
+
+  lock_release(&fs_lock);
+
+  return -1;
 }
 
-//system call -17
-bool file_remove (const char *file){
-  return filesys_remove(file);
+
+int read(int fd, void *buffer, unsigned size)
+{
+  struct list_elem *e;
+
+  lock_acquire(&fs_lock);
+
+  if (fd == 0)
+  {
+    lock_release(&fs_lock);
+    return (int) input_getc();
+  }
+
+  if (fd == 1)
+  {
+    lock_release(&fs_lock);
+    return 0;
+  }
+
+  if (list_empty(&thread_current() -> fd_list))
+  {
+    lock_release(&fs_lock);
+    return 0;
+  }
+
+  e = list_front(&thread_current() -> fd_list);
+  while (e != NULL)
+  {
+    struct thread_file *t = list_entry(e, struct thread_file, file_elem);
+    if (t -> fd == fd)
+    {
+      lock_release(&fs_lock);
+      int bytes = (int) file_read(t->file_addr, buffer, size);
+      return bytes;
+    }
+    e = e->next;
+  }
+
+  lock_release(&fs_lock);
+  return -1;
 }
 
-//system call -18
-int write (int fd, const void *buffer, unsigned length){
-  unsigned char *buf = buffer; 
-  int write_length;
-  
-  if (fd <= 0 || fd >= 128) {
+
+void seek(int fd, unsigned position)
+{
+  struct list_elem *e;
+
+  lock_acquire(&fs_lock);
+
+  if (list_empty(&thread_current() -> fd_list))
+  {
+    lock_release(&fs_lock);
+    return;
+  }
+
+  e = list_front(&thread_current() -> fd_list);
+  struct thread_file *t;
+
+  while (e != NULL)
+  {
+    t = list_entry(e, struct thread_file, file_elem);
+    if (t -> fd == fd)
+    {
+      file_seek(t -> file_addr, position);
+      lock_release(&fs_lock);
+      return;
+    }
+    e = e -> next;
+  }
+
+  lock_release(&fs_lock);
+}
+
+
+unsigned tell(int fd)
+{
+  struct list_elem *e;
+  lock_acquire(&fs_lock);
+
+  if (list_empty(&thread_current() -> fd_list))
+  {
+    lock_release(&fs_lock);
     return -1;
   }
-  
-  // 버퍼 주소의 유효성 검사
-  if (!is_valid_ptr(buffer)) {
-    // 주소가 유효하지 않으면 에러 처리
-    return -1;
+
+  e = list_front(&thread_current() -> fd_list);
+  struct thread_file *t;
+  unsigned location;
+  while (e != NULL)
+  {
+    t = list_entry(e, struct thread_file, file_elem);
+
+    if (t -> fd == fd)
+    {
+      location = (unsigned) file_tell(t->file_addr);
+      lock_release(&fs_lock);
+      return location;
+    }
+    e = e -> next;
   }
-  
-  lock_acquire(&filesys_lock);
-  
-  if (fd == 1) {
-    putbuf(buf, length);
-    lock_release(&filesys_lock);
-    return length;
-  } else {
-    struct file *f = process_get_file(fd);
-    if (f == NULL) {
-      lock_release(&filesys_lock);
-      return -1;
-    }
-    write_length = file_write(f, buffer, length);
-    lock_release(&filesys_lock);
-    return write_length;
+
+  lock_release(&fs_lock);
+
+  return -1;
+}
+
+void close(int fd)
+{
+  struct list_elem *e, *next;
+
+  lock_acquire(&fs_lock);
+
+  if (list_empty(&thread_current() -> fd_list))
+  {
+    lock_release(&fs_lock);
+    return;
   }
+
+  e = list_front(&thread_current() -> fd_list);
+  struct thread_file *t;
+  while (e != NULL)
+  {
+    t = list_entry(e, struct thread_file, file_elem);
+    next = e -> next; 
+    if (t -> fd == fd)
+    {
+      file_close(t -> file_addr);
+      list_remove(&t -> file_elem);
+      lock_release(&fs_lock);
+
+      return;
+    }
+    e = next;
+  }
+
+  lock_release(&fs_lock);
 }
 
 
-//system call -19
-void seek (int fd, unsigned position) {
-    struct file *f = process_get_file(fd);
-    if (f != NULL) {
-      file_seek(f, position);
-    } 
-    else {
-      exit(-1);
-    }
+bool is_valid_ptr(const void *usr_ptr) {
+  struct thread *current_thread = thread_current();
+  
+  if (usr_ptr == NULL) return false;
+  
+  if (!is_user_vaddr(usr_ptr)) return false;
+  
+  if (pagedir_get_page(current_thread -> pagedir, usr_ptr) == NULL) return false;
+  
+  return true;
 }
 
-//system call -20
-unsigned tell(int fd) {
-    struct file *f = process_get_file(fd);
-    if (f == NULL) {
-        exit(-1);
-    }
-    return file_tell(f);
+void validate_buffer (void *buffer, unsigned size)
+{
+  unsigned i = 0;
+  char *ptr = (char *)buffer;
+  
+  while (i++ < size) if (!is_valid_ptr((const void *) ptr++)) exit(-1); 
 }
 
-//system call -21
-void close(int fd) {
-    struct file *f = process_get_file(fd);
-    if (f == NULL) {
-        return;
-    }
-    process_close_file(fd);
-
-    if (fd <= 1 || fd <= 2) { 
-        return;
-    }
-    file_close(f);
-}
-
-void process_close_file(int fd_index){
-    struct thread *cur = thread_current();
-    if (fd_index < 3 || fd_index >= 128){
-      return NULL;
-    }
-    if (cur->fd_table[fd_index] != NULL){
-      file_close(cur->fd_table[fd_index]);
-      cur->fd_table[fd_index] = NULL;
-    }
+void get_args (struct intr_frame *f, int *args, int num_of_args)
+{
+  int i = 0;
+  int *ptr;
+  
+  while (i < num_of_args)
+  {
+    ptr = (int *) f->esp + i + 1;
+    if (!is_valid_ptr((const void *) ptr)) exit(-1);
+    args[i++] = *ptr; 
+  }
 }
 

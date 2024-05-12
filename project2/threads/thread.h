@@ -4,9 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-//추가
-// #include <pthread.h>
-
+#include "synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -26,8 +24,6 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
-
-//sibal
 
 /* A kernel thread or user process.
 
@@ -105,57 +101,24 @@ struct thread
 
    int nice;                            /* value for nice */
    int recent_cpu;                      /* value for recent_cpu */
-   
+
     /* Shared between thread.c and synch.c. */
-   struct list_elem elem;              /* List element. */
+    struct list_elem elem;              /* List element. */
 
-   #ifdef USERPROG
-      uint32_t *pagedir;
-   //system call 1
-/* parent thread id */
-      tid_t parent_id;
-/* signal to indicate the child's executable-loading status:
-* - 0: has not been loaded
-* - -1: load failed
-* - 1: load success*/
-      int child_load_status;
-/* monitor used to wait the child, owned by wait-syscall and waiting
-for child to load executable */
-      struct lock *lock_child;
-      struct condition *cond_child;
-/* list of children, which should be a list of struct child_status */
-      struct list children;
-/* file struct represents the execuatable of the current thread */
-      struct file *exec_file;
-      
-      //system call 4
-   #endif
- //file m 1
-    struct file *fd_table[128];
-    int fd_index;
-    struct file *running_file;
-
-    int exit_status;
+#ifdef USERPROG
+    /* Owned by userprog/process.c. */
+    uint32_t *pagedir;                 /* Page directory. */
+    struct list child_process_list;    
+    int exit_status;                   
+    struct list_elem child_elem;       
+    struct semaphore waiting;  
+    struct list fd_list;      
+    int cur_fd;                        
+#endif
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
-
-struct child_process {
-   tid_t tid;
-   int exit_status;
-   bool is_exit_called;
-   bool has_been_waited;
-   struct list_elem elem;
-};
-
-
-
-
-// struct lock {
-// 	int init;
-// 	pthread_mutex_t mutex;
-// };
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -199,6 +162,9 @@ void increase_recent_cpu (void);
 void recalculate_all_priority (void);
 void recalculate_all_recent_cpu (void);
 
+void thread_exit (void);
+void thread_yield (void);
+
 // get global tick
 int64_t get_global_tick(void);
 
@@ -210,17 +176,8 @@ int thread_get_priority (void);
 void thread_set_priority (int);
 
 int thread_get_nice (void);
-void thread_set_nice (int nice);
+void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
-// void lock_init(struct lock *);
-
-// void
-// lock_init(struct lock *lock)
-// {
-// 	lock->init = LOCK_COND_INIT_MAGIC;
-// 	pthread_mutex_init(&lock->mutex, NULL);
-// }
-
 
 #endif /* threads/thread.h */

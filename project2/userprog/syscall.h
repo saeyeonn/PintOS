@@ -1,26 +1,28 @@
 #ifndef USERPROG_SYSCALL_H
 #define USERPROG_SYSCALL_H
 
+#include <stdbool.h>
+#include <debug.h>
+
+typedef int pid_t;
+
 void syscall_init (void);
-struct file *process_get_file(int);
 
+void halt (void);
+void exit (int status);
+pid_t exec (const char *cmd_line);
+int wait (pid_t);
+bool create (const char *file_name, unsigned size);
+bool remove (const char *file_name);
+int open (const char *file);
+int filesize (int fd);
+int read (int fd, void *buffer, unsigned size);
+int write (int fd, const void *buffer, unsigned size);
+void seek (int fd, unsigned position);
+unsigned tell (int fd);
+void close (int fd);
 
-/* Lock. */
-struct lock 
-  {
-    struct thread *holder;      /* Thread holding lock (for debugging). */
-    struct semaphore *semaphore; /* Binary semaphore controlling access. */
-
-    /* ++1.2 Priority Donation*/
-    struct list_elem *elem; /* List element for priority donation. */
-    int max_priority;      /* Max priority among the threads acquiring the lock. */
-  };
-
-struct lock filesys_lock;
-  
-
-void lock_init (struct lock *);
-void lock_acquire (struct lock *);
-
+bool is_valid_ptr(const void *usr_ptr);
+void validate_buffer (void *buffer, unsigned size);
 
 #endif /* userprog/syscall.h */
