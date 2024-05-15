@@ -100,6 +100,33 @@ We will consider
 
 <br><br>
 
-## Project 3 : coming soon...
+## Project 3 - 1 : Appendix
 
 ### [ Requirements ]
+
+
+
+<br><br>
+
+## Project 3 - 2 : Virtual Memory
+
+### [ Requirements ]
+
+### 1. Demand Paging with Swapping
+
+#### 📍 Main goal
+
+- Demand paging
+- Memory mapped file 
+- Pinning page
+
+<br>
+
+### 2. Stack growth
+
+#### 📍 Main goal
+
+- Implement expandable stack
+
+
+
